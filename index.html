@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avoid the Falling Balls</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        #gameArea {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            background-color: #000;
+            border: 2px solid #fff;
+        }
+
+        #player {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background-color: red;
+            transform: translateX(-50%);
+            border-radius: 50%;
+        }
+
+        .ball, .bomb {
+            position: absolute;
+            border-radius: 50%;
+        }
+
+        .ball {
+            background-color: blue;
+        }
+
+        .bomb {
+            background-color: orange;
+            width: 30px; /* 폭탄 사이즈 */
+            height: 30px; /* 폭탄 사이즈 */
+            border-radius: 50%;
+            clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); /* 폭탄 모양 */
+            background: radial-gradient(circle, rgba(255, 165, 0, 0.8) 50%, rgba(255, 69, 0, 0.8) 100%);
+        }
+
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 20px;
+        }
+
+        #timer {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameArea">
+        <div id="score">점수: 0</div>
+        <div id="timer">시간: 60</div>
+        <div id="player"></div>
+    </div>
+
+    <script>
+        const player = document.getElementById('player');
+        const gameArea = document.getElementById('gameArea');
+        const scoreDisplay = document.getElementById('score');
+        const timerDisplay = document.getElementById('timer');
+        const gameAreaWidth = gameArea.offsetWidth;
+        const gameAreaHeight = gameArea.offsetHeight;
+        let playerPos = gameAreaWidth / 2 - 25;
+        let gameOver = false;
+        let score = 0;
+        let dropSpeed = 5;  // 초기 공 떨어지는 속도
+        let playerSpeed = 40; // 초기 플레이어 이동 속도
+        const scoreIncrementThreshold = 50;  // 점수 증가 기준
+        const maxBombs = 5; // 최대 폭탄 개수
+        const gameDuration = 60; // 게임 제한 시간 (초)
+        let remainingTime = gameDuration;
+        let bombCount = 0;
+        let activeBombs = 0; // 현재 화면에 있는 폭탄 개수
+
+        // 공과 폭탄의 빈도 조절 (공의 빈도 높이기)
+        const bombFrequency = 0.1; // 폭탄의 빈도 (0~1 사이의 확률, 공보다 빈도 높음)
+        const ballFrequency = 0.9; // 공의 빈도 (0~1 사이의 확률, 폭탄보다 낮음)
+
+        let bombDropIntervals = [10, 20, 30, 40, 50]; // 폭탄 떨어지는 시간 (초)
+        let nextBombDropIndex = 0;
+        let bombDropTimer = 0;
+
+        // 플레이어의 초기 위치 설정
+        player.style.left = playerPos + 'px';
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'ArrowLeft') {
+                playerPos -= playerSpeed;
+                if (playerPos < 0) playerPos = 0;
+            } else if (event.key === 'ArrowRight') {
+                playerPos += playerSpeed;
+                if (playerPos > gameAreaWidth - 50) playerPos = gameAreaWidth - 50;
+            }
+            player.style.left = playerPos + 'px';
+        });
+
+        function getRandomScore(itemSize) {
+            if (itemSize < 30) {
+                // 작은 공일 경우: 6점에서 10점 사이
+                return Math.floor(Math.random() * 5) + 6;
+            } else {
+                // 큰 공일 경우: 1점에서 4점 사이
+                return Math.floor(Math.random() * 4) + 1;
+            }
+        }
+
+        function createItem() {
+            const item = document.createElement('div');
+            const isBomb = Math.random() < bombFrequency && bombCount < maxBombs; // 폭탄의 빈도 설정 및 폭탄 개수 제한
+            const itemSize = Math.floor(Math.random() * 31) + 15; // 공의 사이즈를 무작위로 설정 (15px ~ 45px 사이)
+
+            if (isBomb) {
+                item.classList.add('bomb');
+                item.style.width = '30px'; // 폭탄 사이즈
+                item.style.height = '30px'; // 폭탄 사이즈
+                item.scoreValue = 0; // 폭탄의 점수는 0
+                bombCount++; // 폭탄 개수 증가
+                activeBombs++; // 현재 화면에 있는 폭탄 개수 증가
+            } else {
+                item.classList.add('ball');
+                item.style.width = itemSize + 'px';
+                item.style.height = itemSize + 'px';
+                item.scoreValue = getRandomScore(itemSize); // 공의 점수 설정
+            }
+
+            item.style.left = Math.random() * (gameAreaWidth - itemSize) + 'px';
+            item.style.top = '0px';
+            gameArea.appendChild(item);
+            return item;
+        }
+
+        function isCollision(item, player) {
+            const itemRect = item.getBoundingClientRect();
+            const playerRect = player.getBoundingClientRect();
+            return !(itemRect.right < playerRect.left ||
+                     itemRect.left > playerRect.right ||
+                     itemRect.bottom < playerRect.top ||
+                     itemRect.top > playerRect.bottom);
+        }
+
+        function moveItem(item) {
+            const itemSize = parseInt(item.style.width);
+            const itemInterval = setInterval(function() {
+                let itemPos = item.offsetTop + dropSpeed;
+                item.style.top = itemPos + 'px';
+
+                if (itemPos > gameAreaHeight - 50 && itemPos < gameAreaHeight) {
+                    if (isCollision(item, player)) {
+                        if (item.classList.contains('bomb')) {
+                            score = 0; // 폭탄 맞으면 점수 초기화
+                            scoreDisplay.textContent = `점수: ${score}`; // 점수 즉시 반영
+                            item.remove();
+                            clearInterval(itemInterval);
+                            bombCount--; // 폭탄 개수 감소
+                            activeBombs--; // 현재 화면에 있는 폭탄 개수 감소
+                        } else {
+                            updateScore(item.scoreValue); // 공에 맞으면 점수 업데이트
+                            item.remove();
+                            clearInterval(itemInterval);
+                        }
+                    }
+                }
+
+                // 공이나 폭탄이 화면을 벗어나면 제거
+                if (itemPos > gameAreaHeight || itemPos <= 0) {
+                    item.remove();
+                    clearInterval(itemInterval);
+
+                    if (item.classList.contains('bomb')) {
+                        bombCount--; // 폭탄이 바닥에 떨어졌을 때 점수는 깎이지 않음
+                        activeBombs--; // 현재 화면에 있는 폭탄 개수 감소
+                    }
+                }
+            }, 20);
+        }
+
+        function updateScore(points) {
+            score += points;
+            scoreDisplay.textContent = `점수: ${score}`;
+            
+            // 점수가 50점씩 증가할 때마다 공 떨어지는 속도와 플레이어의 이동 속도 증가
+            if (score > 0 && score % scoreIncrementThreshold === 0) {
+                dropSpeed *= 1.5;
+                playerSpeed *= 1.2; // 플레이어 이동 속도 증가
+            }
+        }
+
+        function gameLoop() {
+            if (!gameOver) {
+                const item = createItem();
+                moveItem(item);
+                setTimeout(gameLoop, 1000 / (Math.random() * (1 - ballFrequency) + ballFrequency)); // 공과 폭탄의 빈도를 조절
+            }
+        }
+
+        function updateTimer() {
+            if (remainingTime > 0) {
+                remainingTime--;
+                timerDisplay.textContent = `시간: ${remainingTime}`;
+
+                // 10초 간격으로 폭탄 생성
+                if (bombDropIntervals.includes(remainingTime)) {
+                    createItem(); // 폭탄 생성
+                    bombDropTimer++; // 폭탄 생성 타이머 업데이트
+                }
+            } else {
+                gameOver = true;
+                alert('시간 종료! 게임 오버!');
+            }
+        }
+
+        // 게임 시작
+        gameLoop();
+        setInterval(updateTimer, 1000); // 1초마다 타이머 업데이트
+    </script>
+</body>
+</html>
